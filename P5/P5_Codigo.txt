@@ -1,0 +1,117 @@
+/*
+ * File:   main.c
+ * Author: joel_alvaro
+ *
+ * Created on 05 de abril de 2022, 03:07 PM
+ */
+
+
+////+++++++++++++++++++++++++++++++++++++| LIBRARIES / HEADERS |+++++++++++++++++++++++++++++++++++++
+#include "device_config.h"
+#include <math.h>
+//+++++++++++++++++++++++++++++++++++++| DIRECTIVES |+++++++++++++++++++++++++++++++++++++
+#define _XTAL_FREQ 1000000
+#define DALEY_SWEEP 300
+
+//+++++++++++++++++++++++++++++++++++++| DATA TYPES |+++++++++++++++++++++++++++++++++++++
+enum exponent{ bbase = 2, limit = 8};
+enum puerto_Directo { output, input};
+enum puerto_Corriente { digital, analog};
+enum Boton_1 {no_press1, press1};
+enum Boton_2 {no_press2, press2};
+enum Boton_3 {no_press3, press3};
+enum Boton_4 {no_press4, press4};
+enum Boton_5 {no_press5, press5};
+enum Boton_6 {no_press6, press6};
+enum Boton_7 {no_press7, press7};
+enum Boton_8 {no_press8, press8};
+enum Led_1 {off1, on1};
+enum Led_2 {off2, on2};
+enum Led_3 {off3, on3};
+enum Led_4 {off4, on4};
+enum Led_5 {off5, on5};
+enum Led_6 {off6, on6};
+enum Led_7 {off7, on7};
+enum Led_8 {off8, on8};
+int Indicador = -1;
+//Estas son todas las declaraciones de variables, desde los leds usados hasta los
+//botones, contamos con un indicador negado para mayor facilidad y tambien declaramos las entradas digitales y analogas
+//+++++++++++++++++++++++++++++++++++++| FUNCTION DECLARATIONS |+++++++++++++++++++++++++++++++++++++
+void portsInit( void );
+unsigned char random (void);
+unsigned char LED, Botones = 0;
+void knightrider(void);
+//Llamamos nuestras funciones, desde la que da valores random, la declaracion de igualdad del led y boton y el knightrider
+//+++++++++++++++++++++++++++++++++++++| MAIN |+++++++++++++++++++++++++++++++++++++
+void main(void) {
+    portsInit();
+    while( 1 ) { //loop infinito del while
+        LED = random(); //el LED tieen valores random 
+        LATA = LED;
+        Botones = ~PORTD; //PORD negado 
+        if (LED == Botones) //PAra evitar usar el breack solo igualamos el LED y Boton para activar la secuancia de los LEDS
+            knightrider(); 
+    }   
+}
+
+
+//+++++++++++++++++++++++++++++++++++++| FUNCTIONS |+++++++++++++++++++++++++++++++++++++
+void portsInit( void) {
+    ANSELA= digital;
+    TRISA = 0x00;
+    ANSELD= digital;
+    TRISD = 0xFF;
+}
+
+void knightrider (void) {
+    for (unsigned char i = 0; i < 8; i++){
+        LATA = (unsigned char) pow(2, i); // La potencia de 2 a la 8 de ida 
+        __delay_ms(200);
+    }
+    for (unsigned char i = 7; i > 0; i--){ 
+        LATA = (unsigned char) pow(2, i); // La potencia de 2 a la 8 de venida 
+        __delay_ms(200);
+    }
+    LATA = 0x01;
+    __delay_ms(1000);
+}
+
+unsigned char random (void){ //para hacer todo random fue util usar el switch case ya que con el podemos activar del LED 0 al 7
+    Indicador = rand() % 8;
+    unsigned char  numero = 0;
+    switch (Indicador)
+    {
+        case 0:
+          numero = 0x01; 
+        __delay_ms(1000);
+        break;
+        case 1:
+             numero = 0x02; 
+        __delay_ms(1000);
+        case 2:
+          numero = 0x04; 
+        __delay_ms(1000);
+        break;
+        case 3:
+          numero = 0x08; 
+        __delay_ms(1000);
+        break;
+        case 4:
+          numero = 0X10; 
+        __delay_ms(1000);
+        break;
+        case 5:
+          numero = 0X20;  
+        __delay_ms(1000);
+        break;
+        case 6:
+          numero = 0X40; 
+        __delay_ms(1000);
+        break;
+        default:
+          numero = 0x80;
+        __delay_ms(1000);
+        break;
+    }
+    return numero;
+}
