@@ -1,0 +1,176 @@
+
+#include "device_config.h"
+#include <stdio.h>
+#include <xc.h>
+
+#define BUTTON          PORTBbits.RB1
+#define ENABLER_TIMER0  T0CONbits.TMR0ON
+#define ENABLER_TIMER1  T1CONbits.TMR1ON
+#define TIMER0_FLAG     INTCONbits.TMR0IF
+#define TIMER1_FLAG     PIR1bits.TMR1IF
+#define INT0_FLAG       INTCONbits.INT0IF
+
+//DATA SECTION//////////////////////////////////////////////////////////////////
+
+enum oscillator {oscillator1MHz  = 0b00110010 };
+
+enum timer0     {CountHigh1s     = 0x0B,
+                 CountLow1s      = 0xDC,
+                 timer0init      = 0b00000001 };
+
+enum timer1     {CountHigh20ms   = 0xEC,
+                 CountLow20ms    = 0x78,
+                 TimerInit20ms   = 0b00000010 };
+
+enum timer1000  {CountHigh1000ms = 0x0B,
+                 CountLow1000ms  = 0xDC,
+                 TimerInit1000ms  = 0b00100010};                 
+           
+//FUNCTION DECLARATION//////////////////////////////////////////////////////////////////
+void interrupsInit (void);
+void PortsInit(void);
+void delay_1s(void);
+void delay_20ms(void);
+void debounce (void);
+void delay_1000ms(void);
+void clusdelay(void);
+void semaforo(void);
+//VARIABLE //////////////////////////////////////////////////////////////////
+int state = 1;
+int countInt = 0;
+//MAIN SECTION//////////////////////////////////////////////////////////////////
+void main(void) {
+    PortsInit();
+    interrupsInit ();
+    delay_1s(); 
+    while (1){
+        debounce();
+    }
+}
+
+//FUNCTIONs DEFINITION//////////////////////////////////////////////////////////////////
+void PortsInit(void){
+    LATD = 0;
+    LATB = 0;
+    ANSELD = 0;
+    ANSELB = 0;
+    TRISBbits.TRISB0 = 0;
+    TRISBbits.TRISB1 = 1;
+    TRISD = 0;
+}
+
+void debounce( void ){
+    while (BUTTON);
+    delay_20ms();
+    if(BUTTON)return;
+    LATBbits.LATB0 = 0;
+    while(!BUTTON);
+    delay_20ms();
+    LATBbits.LATB0= 1; 
+}
+
+void delay_20ms( void ){
+    TMR1H = CountHigh20ms;
+    TMR1L = CountLow20ms;
+    TIMER1_FLAG = 0;
+    T1CON = TimerInit20ms;
+    ENABLER_TIMER1 = 1;
+    while(!PIR1bits.TMR1IF);
+    ENABLER_TIMER1 = 0;   
+}
+
+void delay_1s( void ){ // cambiar a timer0
+    TMR0H = CountHigh1s;
+    TMR0L = CountLow1s;
+    TIMER0_FLAG = 0;
+    T0CON = timer0init;
+    ENABLER_TIMER0 = 1;
+}
+
+void delay_1000ms(void){
+    TMR1H = CountHigh1000ms;
+    TMR1L = CountLow1000ms;
+    TIMER1_FLAG = 0;
+    T1CON = TimerInit1000ms;
+    ENABLER_TIMER1 = 1;
+    while(!PIR1bits.TMR1IF);
+    ENABLER_TIMER1 = 0;  
+}
+
+void interrupsInit( void ){
+    RCONbits.IPEN = 0;//          disables priority levels on interrupts
+    INTCONbits.PEIE_GIEL = 0;//        disables all peripheral interrupts
+    INT0_FLAG = 0;//                clear INT0 interrupt flag
+    INTCONbits.TMR0IF = 0;//              clears TMR0 overflow interrupt flag
+    INTCON2bits.INTEDG0 = 0;//    INT0 interrupt on falling edge
+    INTCONbits.INT0IE = 1;//       enables INT0 external interrupt   
+    INTCONbits.TMR0IE = 1;//       enables the TMR0 overflow interrupt
+    INTCONbits.GIE_GIEH = 1;//          enables all unmasked core interrupts
+}
+
+void semaforo (void){
+    //SI NO SE PRESIONA EL BOTON////////////////////////////////////////////////
+    if (countInt == 0){
+        if (state == 1)
+            LATD = 0b00100001, //state 1
+            state = 2;
+        else if (state == 2)
+            LATD = 0b00010001, //state 2
+            state = 4;
+        else if (state == 4)
+            LATD = 0b00001100, //state 4
+            state = 5;
+        else if (state == 5)
+            LATD = 0b00001010, //state 5
+            state = 1;
+    }
+    //SI SE PRESIONA EL BOTON///////////////////////////////////////////////////
+    else {
+        if (state == 1)
+            LATD = 0b00100001, //state 1
+            state = 2;
+        else if (state == 2)
+            LATD = 0b00010001, //state 2
+            state = 3;
+        else if (state == 3)   //state 3
+            LATD = 0b11001001,
+            clusdelay(),
+            countInt = 0,
+            state = 4;
+        else if (state == 4)
+            LATD = 0b00001100, //state 4
+            state = 5;
+        else if (state == 5)
+            LATD = 0b00001010, //state 5
+            state = 1;
+    }  
+}
+
+void clusdelay(void){
+    while (countInt != 1){
+        delay_1000ms();
+        countInt = countInt - 1;
+    }
+    
+}
+
+
+//INTERRUPT////////////////////////////////////////////////////////////////////
+__interrupt( high_priority ) void high_isr( void ){
+    if( TIMER0_FLAG ) {//           TM0R saturado? 
+        semaforo();
+        TMR0H = 0x0B;
+        TMR0L = 0xDC;
+        TIMER0_FLAG = 0;
+    }
+    if(INT0_FLAG) {
+        if (countInt < 8)
+            countInt = countInt + 1,
+            LATD = 0b10000000,
+            INT0_FLAG = 0; //
+        else if (countInt == 8)
+            countInt = 8,
+            LATD = LATD = 0b10000000,
+            INT0_FLAG = 0;
+        }
+    }
