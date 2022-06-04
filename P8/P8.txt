@@ -1,0 +1,179 @@
+#include "device_config.h"
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#define _XTAL_FREQ 1000000
+#define TWO_SECONDS 2000
+#define DELAY_SWEEP 150
+
+#define LCD_DATA_R      PORTD
+#define LCD_DATA_W      LATD
+#define LCD_DATA_DIR    TRISD
+#define LCD_RS          PORTCbits.RC2
+#define LCD_RS_DIR      TRISCbits.TRISC2
+#define LCD_RW          PORTCbits.RC1
+#define LCD_RW_DIR      TRISCbits.TRISC1
+#define LCD_E           PORTCbits.RC0
+#define LCD_E_DIR       TRISCbits.TRISC0
+#define LCD_Data        
+
+
+
+enum por_dir{ output, input }; // output = 0, input = 1
+enum por_ACDC{ digital, analog };// digital = 0, analog = 1
+enum resistor_state{ set_ON, res_ON };// set_ON = 0, res_ON = 1
+enum led_state{ led_OFF, led_ON };// led_OFF = 0, led_ON = 1
+enum butto_state{ pushed, no_pushed };// pushed = 0, no_pushed = 1
+enum exponent {bbase=2, limit=8};
+unsigned char contador;
+
+
+//ISR for high-priority
+void __interrupt ( high_priority) high_isr( void ); 
+//ISR for low-priority
+void __interrupt ( low_priority) low_isr( void ); 
+void __interrupt () timer_isr( void ) ;
+
+void portsInit( void );  // 	Ports configuration.
+void LCD_rdy( void );   
+void LCD_init( void);
+void LCD_cmd ( char cx );
+void send2LCD ( char xy );
+void timer0init ( void );
+
+void main( void ) {
+	//Configurations//////////////////////////////////////////////////////////
+        portsInit(  );// Ports Configuration
+        LCD_init( );//LCD Configuration
+        char Val[3];
+        char frequencia[11]= {'f','r','e','q','u','e','n','c','i','a',':'};
+         for(int i = 0; i <= 10; i++){
+         __delay_ms(5);
+         send2LCD(frequencia[i]);
+         
+        }
+        LCD_cmd(0xC0); // Salta una linea en el display
+        for(int i = 0; i <= 4; i++)
+        LCD_cmd(0x14); // Se mueve a la derecha
+        send2LCD('H');
+        send2LCD('z');
+        for(int i = 0; i <= 6; i++)
+        LCD_cmd(0x10); // Se mueve a la izquierda
+        
+        timer0init(); //TIMERS Configuration
+        
+       
+      
+	//INFINITE CYCLE///////////////////////////////////////////////
+	while( 1 ) {
+           
+        
+     TMR0L = 0; //                           Clear Timer0 registers
+        TMR1H = 0x0B; //                        Load Timer1 registers
+        TMR1L = 0xDC;
+        
+        
+        contador = 0; //                         Clear Timer1 overflow counter
+        
+        T1CONbits.TMR1ON = 1; //                Start Timer1
+        T0CONbits.TMR0ON = 1; //                Start Timer0
+        
+        
+        while(contador != 4); //                 Wait until 1 second has elapsed
+        
+        T0CONbits.TMR0ON = 0; //                Stop Timer0
+        T1CONbits.TMR1ON = 0; //                Stop Timer1    
+        
+        
+        sprintf( Val,"%03d", TMR0L );  //     Convert integer to string value
+        send2LCD(Val[0]); //                Send value to LCD
+        send2LCD(Val[1]);
+        send2LCD(Val[2]);
+        LCD_cmd( 0xC0 );
+            
+  }
+}
+
+void portsInit ( void ) {   //		Ports configuration
+    
+    ANSELA = digital;//         Set PortA as digital port
+    ANSELB = digital;//         Set PortB as digital port
+    TRISAbits.RA4=1;//         Set PortA as input
+    TRISB=0;//                 Set PortB as output
+   
+}
+
+void __interrupt () timer_isr( void )
+{
+    if(INTCONbits.TMR0IF == 1)
+    {
+        INTCONbits.TMR0IF = 0; //               Clear Timer0 Overflow Flag
+    }
+    if(PIR1bits.TMR1IF == 1)
+    {
+        TMR1H = 0x0B; //                        Reset Timer1 register
+        TMR1L = 0xDC;
+        contador++; //                          Incrementa contador
+        PIR1bits.TMR1IF = 0; //                 Reset Timer1 Overflow Flag
+    }
+}
+
+void LCD_rdy ( void ) {   //		Ports configuration
+	char test;
+    LCD_DATA_DIR = 0xFF;
+    test = 0x80;
+    while (test){
+        LCD_RS =0;
+        LCD_RW=1;
+        LCD_E =1;
+        test = LCD_DATA_R;
+        Nop();
+        LCD_E =0;
+        test &= 0x80;
+    }
+    TRISD =0x00;
+    }
+
+void LCD_init ( void ) {   //		Ports configuration
+	LATC =0;
+    LCD_E_DIR=0;
+    LCD_RS_DIR=0;
+    LCD_RW_DIR=0;
+    LCD_cmd(0x38);
+    LCD_cmd(0x0f);
+    LCD_cmd(0x14);
+    LCD_cmd(0x01);
+    }
+
+void LCD_cmd ( char cx ) {   //		Ports configuration
+	LCD_rdy();
+    LCD_RS=0;
+    LCD_RW=0;
+    LCD_E=1;
+    Nop();
+    LCD_DATA_W =cx;
+    Nop();
+    LCD_E=0;
+    }
+
+void send2LCD ( char xy ) {   //		Ports configuration
+	
+    LCD_RS=1;
+    LCD_RW=0;
+    LCD_E=1;
+    LCD_DATA_W =xy;
+    Nop();
+    Nop();
+    LCD_E=0;
+    }
+
+void timer0init ( void ) {   //		Timer configuration
+	
+    T0CON = 0x78; //                            Timer0 8-bit no pre-scaler
+    T1CON = 0x66; //                            Timer1 16-bit pre-scaler 8, 
+    INTCON = 0xE0; //                           Disable Timer0 interrupts 
+    PIE1 = 0x01; //                             Enable Timer1 interrupts
+    PIR1bits.TMR1IF = 0; //                     Clear overflow flag
+    
+    }
